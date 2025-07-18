@@ -22,15 +22,24 @@ async function sendToWordPress(
   tag = "dailygainer"
 ) {
   try {
-    const response = await axios.post(wpApiUrl, {
-      stockName: stockName,
-      nseSymbol: nseSymbol,
-      changePercent: `+${changePercent.toFixed(2)}%`,
-      summary1: reasons[0],
-      summary2: reasons[1],
-      summary3: reasons[2],
-      tag: tag,
-    });
+    const response = await axios.post(
+      wpApiUrl,
+      {
+        stockName,
+        nseSymbol,
+        changePercent: `+${changePercent.toFixed(2)}%`,
+        summary1: reasons[0],
+        summary2: reasons[1],
+        summary3: reasons[2],
+        tag,
+      },
+      {
+        auth: {
+          username: process.env.WP_USER,
+          password: process.env.WP_PASS,
+        },
+      }
+    );
 
     console.log(`Posted to WordPress for ${stockName}:`, response.data);
     return response.data;

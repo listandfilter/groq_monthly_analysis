@@ -1,7 +1,10 @@
 import dayjs from "dayjs";
 
 export async function visitStockEdge(browser, { name }) {
+  const userAgent =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.5993.118 Safari/537.36";
   const searchPage = await browser.newPage();
+  await searchPage.setUserAgent(userAgent);
   await searchPage.goto("https://search.stockedge.com/", {
     waitUntil: "networkidle2",
   });

@@ -5,6 +5,10 @@ const REDIFF_URLS = [
 const MIN_CHANGE = 7.0; // %‑change threshold
 
 export async function getTopGainers(page) {
+  await page.setUserAgent(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.5993.118 Safari/537.36"
+  );
+
   const gainers = [];
   for (const url of REDIFF_URLS) {
     console.log(`Visiting: ${url}`);
