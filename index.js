@@ -19,7 +19,7 @@ async function sendToWordPress(
   nseSymbol,
   changePercent,
   reasons,
-  tag = "dailygainer"
+  tag = "monthlygainer"
 ) {
   try {
     const response = await axios.post(
@@ -67,7 +67,7 @@ async function sendToWordPress(
 
   const [page] = await browser.pages();
   const gainers = await getTopGainers(page);
-  console.log(chalk.cyan(`✔ Found ${gainers.length} gainers ≥ 7`));
+  console.log(chalk.cyan(`✔ Found ${gainers.length} gainers ≥ 25`));
 
   for (const g of gainers) {
     console.log(chalk.yellow(`\n🔍 Processing ${g.name} ...`));

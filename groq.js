@@ -20,7 +20,7 @@ Only return a numbered list in this exact format:
 2. Title: Short explanation
 3. Title: Short explanation
 
-Do NOT include any introductions, summaries, or extra lines. Be concise (≤ 180 characters per reason).`;
+Do NOT include any introductions, summaries, or extra lines. Be concise (≤ 180 characters per reason). Also dont mention like "here's reasons" etc only summaries"`;
 
   const { choices } = await groq.chat.completions.create({
     model: "llama3-70b-8192",

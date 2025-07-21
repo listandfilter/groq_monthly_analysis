@@ -1,8 +1,8 @@
 const REDIFF_URLS = [
-  "https://money.rediff.com/gainers/bse/daily/groupa",
-  "https://money.rediff.com/gainers/bse/daily/groupb",
+  "https://money.rediff.com/gainers/bse/monthly/groupa",
+  "https://money.rediff.com/gainers/bse/monthly/groupb",
 ];
-const MIN_CHANGE = 7.0; // %‑change threshold
+const MIN_CHANGE = 25.0; // %‑change threshold
 
 export async function getTopGainers(page) {
   await page.setUserAgent(
