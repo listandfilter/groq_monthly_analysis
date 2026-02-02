@@ -1,20 +1,21 @@
-name: Run Rediff Gainer Scraper
+name: Run Rediff Gainer Scraper (DEBUG)
 
 on:
+  workflow_dispatch:
   schedule:
     - cron: "0 5,8,10 * * *"
-  workflow_dispatch:
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 20
 
@@ -40,9 +41,42 @@ jobs:
             xdg-utils \
             wget
 
-      - name: Install project dependencies
-        run: npm install
+      - name: Install dependencies
+        run: npm ci
 
+      # ---------- SECRET EXISTENCE CHECK ----------
+      - name: Check secrets presence (SAFE)
+        run: |
+          echo "GROQ_API_KEY exists? -> ${{ secrets.GROQ_API_KEY != '' }}"
+          echo "WP_API_URL exists?  -> ${{ secrets.WP_API_URL != '' }}"
+          echo "WP_USER exists?     -> ${{ secrets.WP_USER != '' }}"
+          echo "WP_PASS exists?     -> ${{ secrets.WP_PASS != '' }}"
+
+      # ---------- PRINT WP HOST & PROTOCOL ----------
+      - name: Print WP URL host & protocol (SAFE)
+        run: |
+          node -e "
+            try {
+              const u = new URL(process.env.WP_API_URL);
+              console.log('WP HOST     :', u.host);
+              console.log('WP PROTOCOL :', u.protocol);
+              console.log('WP PATH     :', u.pathname);
+            } catch (e) {
+              console.error('❌ WP_API_URL is INVALID or missing');
+              process.exit(1);
+            }
+          "
+        env:
+          WP_API_URL: ${{ secrets.WP_API_URL }}
+
+      # ---------- RAW NETWORK TEST (MOST IMPORTANT) ----------
+      - name: Test WP URL reachability from GitHub
+        run: |
+          echo "===== CURL TEST START ====="
+          curl -I -m 20 -v "${{ secrets.WP_API_URL }}" || true
+          echo "===== CURL TEST END ====="
+
+      # ---------- CREATE .env ----------
       - name: Create .env file
         run: |
           echo "GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}" >> .env
@@ -50,7 +84,7 @@ jobs:
           echo "WP_USER=${{ secrets.WP_USER }}" >> .env
           echo "WP_PASS=${{ secrets.WP_PASS }}" >> .env
 
+      # ---------- RUN SCRIPT ----------
       - name: Run scraper
         run: |
           node index.js
-          node indexL.js
