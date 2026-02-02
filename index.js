@@ -21,36 +21,53 @@ async function sendToWordPress(
   reasons,
   tag = "monthlygainer"
 ) {
-  try {
-    const response = await axios.post(
-      wpApiUrl,
-      {
-        stockName,
-        nseSymbol,
-        changePercent: `+${changePercent.toFixed(2)}%`,
-        summary1: reasons[0],
-        summary2: reasons[1],
-        summary3: reasons[2],
-        tag,
-      },
-      {
-        auth: {
-          username: process.env.WP_USER,
-          password: process.env.WP_PASS,
-        },
-      }
-    );
+  // 1) Hard fail early if URL missing (most common in GitHub Actions)
+  if (!wpApiUrl) {
+    console.error("❌ WP_API_URL is missing. Set it in GitHub Secrets / workflow env.");
+    return null;
+  }
 
-    console.log(`Posted to WordPress for ${stockName}:`, response.data);
+  try {
+    const payload = {
+      stockName,
+      nseSymbol,
+      changePercent: `+${Number(changePercent).toFixed(2)}%`,
+      summary1: reasons?.[0] ?? "",
+      summary2: reasons?.[1] ?? "",
+      summary3: reasons?.[2] ?? "",
+      tag,
+    };
+
+    const response = await axios.post(wpApiUrl, payload, {
+      auth: {
+        username: process.env.WP_USER ?? "",
+        password: process.env.WP_PASS ?? "",
+      },
+      timeout: 30000,
+      headers: { "Content-Type": "application/json" },
+      validateStatus: () => true, // so we can see WP error responses in logs
+    });
+
+    if (response.status < 200 || response.status >= 300) {
+      console.error(`❌ WordPress responded ${response.status}`);
+      console.error("URL:", wpApiUrl);
+      console.error("Response body:", response.data);
+      return null;
+    }
+
+    console.log(`✅ Posted to WordPress for ${stockName}:`, response.data);
     return response.data;
   } catch (error) {
-    console.error(
-      `WordPress API error for ${stockName}:`,
-      error.response?.data || error.message
-    );
+    console.error(`❌ WordPress request failed for ${stockName}`);
+    console.error("URL:", error.config?.url);
+    console.error("Code:", error.code);              // ETIMEDOUT / ECONNRESET etc.
+    console.error("Message:", error.message);
+    console.error("Status:", error.response?.status);
+    console.error("Body:", error.response?.data);
     return null;
   }
 }
+
 
 /* ---------- Orchestrator ---------- */
 (async () => {
@@ -93,3 +110,4 @@ async function sendToWordPress(
 
   await browser.close();
 })();
+
