@@ -23,6 +23,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             ca-certificates \
+            curl \
+            dnsutils \
             fonts-liberation \
             libappindicator3-1 \
             libasound2t64 \
@@ -50,7 +52,52 @@ jobs:
           echo "WP_USER=${{ secrets.WP_USER }}" >> .env
           echo "WP_PASS=${{ secrets.WP_PASS }}" >> .env
 
-      - name: Run scraper
+      # ✅ THIS WILL SHOW THE REAL 100% ROOT CAUSE (DNS / IPv6 / Firewall / SSL / Redirect / Block)
+      - name: Debug WordPress reachability
+        env:
+          WP_API_URL: ${{ secrets.WP_API_URL }}
+        run: |
+          echo "WP_API_URL=$WP_API_URL"
+
+          echo "----- Extract domain -----"
+          python3 - << 'PY'
+          import os, re
+          url = os.environ.get("WP_API_URL","")
+          m = re.match(r'^https?://([^/]+)', url)
+          print("DOMAIN:", m.group(1) if m else "(could not parse)")
+          PY
+
+          DOMAIN=$(python3 - << 'PY'
+          import os, re
+          url = os.environ.get("WP_API_URL","")
+          m = re.match(r'^https?://([^/]+)', url)
+          print(m.group(1) if m else "")
+          PY
+          )
+
+          echo "----- DNS (A/AAAA) -----"
+          if [ -n "$DOMAIN" ]; then
+            dig +short A "$DOMAIN" || true
+            dig +short AAAA "$DOMAIN" || true
+          fi
+
+          echo "----- Curl /wp-json/ (IPv4 forced) -----"
+          if [ -n "$DOMAIN" ]; then
+            curl -4 -I -L --max-time 20 "https://$DOMAIN/wp-json/" || true
+          fi
+
+          echo "----- Curl /wp-json/ (IPv6 forced) -----"
+          if [ -n "$DOMAIN" ]; then
+            curl -6 -I -L --max-time 20 "https://$DOMAIN/wp-json/" || true
+          fi
+
+          echo "----- Curl exact WP_API_URL (IPv4 forced) -----"
+          curl -4 -I -L --max-time 20 "$WP_API_URL" || true
+
+          echo "----- Curl exact WP_API_URL (IPv6 forced) -----"
+          curl -6 -I -L --max-time 20 "$WP_API_URL" || true
+
+      - name: Run scraper (Gainers + Losers)
         run: |
           node index.js
           node indexL.js
