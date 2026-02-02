@@ -1,15 +1,25 @@
+// ==========================
+// ✅ indexL.js (LOSER) - IPv4 FORCED VERSION
+// ==========================
 import puppeteer from "puppeteer-extra";
 import Stealth from "puppeteer-extra-plugin-stealth";
 import chalk from "chalk";
 import axios from "axios";
 import dotenv from "dotenv";
+import https from "https";
+
+import { getTopLoser } from "./rediffL.js";
+import { summariseFeeds } from "./groqL.js";
+import { visitStockEdge } from "./stockEdge.js";
+
 dotenv.config();
-
-import { getTopLoser } from "./rediffL.js";       // <-- your file
-import { summariseFeeds } from "./groqL.js";      // <-- your file
-import { visitStockEdge } from "./stockEdge.js"; // <-- your file
-
 puppeteer.use(Stealth());
+
+/* ---------- IPv4 Forced HTTPS Agent ---------- */
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  family: 4, // ✅ FORCE IPv4
+});
 
 /* ---------- Helpers ---------- */
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -18,30 +28,44 @@ const wpApiUrl = process.env.WP_API_URL;
 const wpUser = process.env.WP_USER;
 const wpPass = process.env.WP_PASS;
 
-function mask(str = "", keep = 3) {
+function mask(str = "", keep = 4) {
   if (!str) return "";
   if (str.length <= keep) return "*".repeat(str.length);
-  return str.slice(0, keep) + "*".repeat(Math.max(0, str.length - keep));
+  return str.slice(0, keep) + "*".repeat(str.length - keep);
 }
 
 async function wpPreflightCheck() {
-  console.log(chalk.cyan("\n===== WP ENV CHECK ====="));
+  console.log(chalk.cyan("\n===== WP PRE-FLIGHT CHECK (LOSER) ====="));
   console.log("WP_API_URL:", wpApiUrl || "(missing)");
   console.log("WP_USER:", wpUser || "(missing)");
-  console.log("WP_PASS:", wpPass ? mask(wpPass, 4) : "(missing)");
+  console.log("WP_PASS:", wpPass ? mask(wpPass) : "(missing)");
 
   if (!wpApiUrl || !wpUser || !wpPass) {
-    console.log(chalk.red("❌ Missing WP_API_URL / WP_USER / WP_PASS in .env"));
+    console.log(chalk.red("❌ Missing WP_API_URL / WP_USER / WP_PASS in env."));
     return false;
   }
 
-  // 1) Check the wp-json root (should respond 200)
   try {
     const rootUrl = new URL("/wp-json/", wpApiUrl).toString();
-    const r1 = await axios.get(rootUrl, { timeout: 20000 });
-    console.log(chalk.green("✅ WP JSON root OK:"), rootUrl, "status:", r1.status);
+
+    const r = await axios.get(rootUrl, {
+      timeout: 60000,
+      httpsAgent,
+      headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
+      validateStatus: () => true,
+    });
+
+    console.log(chalk.yellow("🔎 /wp-json/ status:"), r.status);
+    if (r.status < 200 || r.status >= 500) {
+      console.log(chalk.red("❌ /wp-json/ looks unreachable or server error"));
+      console.log("Preview:", typeof r.data === "string" ? r.data.slice(0, 200) : r.data);
+      return false;
+    }
+
+    console.log(chalk.green("✅ /wp-json/ reachable via IPv4"));
+    return true;
   } catch (e) {
-    console.log(chalk.red("❌ WP JSON root failed."));
+    console.log(chalk.red("❌ /wp-json/ request failed (IPv4 forced)"));
     console.log("Details:", {
       message: e.message,
       code: e.code,
@@ -50,46 +74,6 @@ async function wpPreflightCheck() {
     });
     return false;
   }
-
-  // 2) Check your exact endpoint with GET (even if it rejects GET, we will see status)
-  try {
-    const r2 = await axios.get(wpApiUrl, {
-      timeout: 20000,
-      auth: { username: wpUser, password: wpPass },
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        Accept: "application/json",
-      },
-      validateStatus: () => true, // don't throw for 401/403/404
-    });
-
-    console.log(
-      chalk.yellow("🔎 Endpoint GET check:"),
-      wpApiUrl,
-      "status:",
-      r2.status
-    );
-
-    // show small part only
-    const preview =
-      typeof r2.data === "string"
-        ? r2.data.slice(0, 200)
-        : JSON.stringify(r2.data).slice(0, 300);
-
-    console.log("Response preview:", preview);
-  } catch (e) {
-    console.log(chalk.red("❌ Endpoint GET request crashed."));
-    console.log("Details:", {
-      message: e.message,
-      code: e.code,
-      status: e.response?.status,
-      data: e.response?.data,
-    });
-    return false;
-  }
-
-  console.log(chalk.cyan("===== END CHECK =====\n"));
-  return true;
 }
 
 async function sendToWordPress(
@@ -102,50 +86,47 @@ async function sendToWordPress(
   const payload = {
     stockName,
     nseSymbol,
-    changePercent: `${changePercent.toFixed(2)}%`,
+    changePercent: `${Number(changePercent).toFixed(2)}%`,
     summary1: reasons?.[0] ?? "",
     summary2: reasons?.[1] ?? "",
     summary3: reasons?.[2] ?? "",
     tag,
   };
 
-  console.log(chalk.blue("\n➡️ Sending payload to WP:"));
-  console.log(JSON.stringify(payload, null, 2));
+  console.log(chalk.blue("\n➡️ Posting to WP (LOSER)"));
+  console.log("URL:", wpApiUrl);
+  console.log("Payload:", JSON.stringify(payload, null, 2));
 
   try {
-    const response = await axios.post(wpApiUrl, payload, {
+    const res = await axios.post(wpApiUrl, payload, {
       auth: { username: wpUser, password: wpPass },
-      timeout: 30000,
+      timeout: 60000,
+      httpsAgent, // ✅ IPv4 forced
       headers: {
         "Content-Type": "application/json",
         "User-Agent": "Mozilla/5.0",
         Accept: "application/json",
       },
-      validateStatus: () => true, // IMPORTANT: we handle non-2xx ourselves
+      validateStatus: () => true,
     });
 
-    console.log(chalk.magenta("📩 WP Response status:"), response.status);
+    console.log(chalk.magenta("📩 WP status:"), res.status);
 
-    // If WP returns an error JSON, show it clearly
-    if (response.status < 200 || response.status >= 300) {
-      console.log(chalk.red("❌ WordPress returned non-2xx"));
-      console.log("Response headers:", response.headers);
-      console.log("Response data:", response.data);
+    if (res.status < 200 || res.status >= 300) {
+      console.log(chalk.red("❌ WP returned error (non-2xx)"));
+      console.log("Response data:", res.data);
       return null;
     }
 
     console.log(chalk.green(`✅ Posted to WordPress for ${stockName}`));
-    console.log("Response data:", response.data);
-    return response.data;
-  } catch (error) {
-    console.log(chalk.red("❌ Axios/network crash while posting to WP"));
-    console.log("Error details:", {
-      message: error.message,
-      code: error.code,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      headers: error.response?.headers,
+    return res.data;
+  } catch (e) {
+    console.log(chalk.red("❌ Axios crash posting to WP"));
+    console.log("Error:", {
+      message: e.message,
+      code: e.code,
+      status: e.response?.status,
+      data: e.response?.data,
     });
     return null;
   }
@@ -154,10 +135,7 @@ async function sendToWordPress(
 /* ---------- Orchestrator ---------- */
 (async () => {
   const ok = await wpPreflightCheck();
-  if (!ok) {
-    console.log(chalk.red("Stopping because WP preflight check failed."));
-    process.exit(1);
-  }
+  if (!ok) process.exit(1);
 
   const browser = await puppeteer.launch({
     headless: "new",
@@ -171,7 +149,6 @@ async function sendToWordPress(
   });
 
   const [page] = await browser.pages();
-
   const losers = await getTopLoser(page);
   console.log(chalk.cyan(`✔ Found ${losers.length} losers`));
 
