@@ -1,20 +1,25 @@
-// ✅ UPDATED GAINER SCRIPT (debug-friendly)
-// - Prints exact WP errors (status + response body)
-// - Preflight checks /wp-json/ and your exact WP_API_URL
-// - Shows payload being sent (so you can match WP-side expectations)
-
+// ==========================
+// ✅ index.js (GAINER) - IPv4 FORCED VERSION
+// ==========================
 import puppeteer from "puppeteer-extra";
 import Stealth from "puppeteer-extra-plugin-stealth";
 import chalk from "chalk";
 import axios from "axios";
 import dotenv from "dotenv";
-dotenv.config();
+import https from "https";
 
 import { getTopGainers } from "./rediff.js";
 import { summariseFeeds } from "./groq.js";
 import { visitStockEdge } from "./stockEdge.js";
 
+dotenv.config();
 puppeteer.use(Stealth());
+
+/* ---------- IPv4 Forced HTTPS Agent ---------- */
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  family: 4, // ✅ FORCE IPv4 (fixes GitHub Actions IPv6 timeout)
+});
 
 /* ---------- Helpers ---------- */
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -36,55 +41,32 @@ async function wpPreflightCheck() {
   console.log("WP_PASS:", wpPass ? mask(wpPass) : "(missing)");
 
   if (!wpApiUrl || !wpUser || !wpPass) {
-    console.log(
-      chalk.red("❌ Missing WP_API_URL / WP_USER / WP_PASS in your env (.env / secrets).")
-    );
+    console.log(chalk.red("❌ Missing WP_API_URL / WP_USER / WP_PASS in env."));
     return false;
   }
 
-  // 1) Check /wp-json/ root
   try {
     const rootUrl = new URL("/wp-json/", wpApiUrl).toString();
-    const r1 = await axios.get(rootUrl, { timeout: 20000 });
-    console.log(chalk.green("✅ /wp-json/ reachable:"), rootUrl, "status:", r1.status);
-  } catch (e) {
-    console.log(chalk.red("❌ /wp-json/ root failed (domain/WP issue)"));
-    console.log("Details:", {
-      message: e.message,
-      code: e.code,
-      status: e.response?.status,
-      data: e.response?.data,
-    });
-    return false;
-  }
 
-  // 2) Check your endpoint with GET to see status/response
-  try {
-    const r2 = await axios.get(wpApiUrl, {
-      timeout: 20000,
-      auth: { username: wpUser, password: wpPass },
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        Accept: "application/json",
-      },
+    // ✅ Force IPv4 here too
+    const r = await axios.get(rootUrl, {
+      timeout: 60000,
+      httpsAgent,
+      headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
       validateStatus: () => true,
     });
 
-    console.log(
-      chalk.yellow("🔎 Endpoint GET check:"),
-      wpApiUrl,
-      "status:",
-      r2.status
-    );
+    console.log(chalk.yellow("🔎 /wp-json/ status:"), r.status);
+    if (r.status < 200 || r.status >= 500) {
+      console.log(chalk.red("❌ /wp-json/ looks unreachable or server error"));
+      console.log("Preview:", typeof r.data === "string" ? r.data.slice(0, 200) : r.data);
+      return false;
+    }
 
-    const preview =
-      typeof r2.data === "string"
-        ? r2.data.slice(0, 400)
-        : JSON.stringify(r2.data).slice(0, 600);
-
-    console.log("Response preview:", preview);
+    console.log(chalk.green("✅ /wp-json/ reachable via IPv4"));
+    return true;
   } catch (e) {
-    console.log(chalk.red("❌ Endpoint GET request crashed"));
+    console.log(chalk.red("❌ /wp-json/ request failed (IPv4 forced)"));
     console.log("Details:", {
       message: e.message,
       code: e.code,
@@ -93,9 +75,6 @@ async function wpPreflightCheck() {
     });
     return false;
   }
-
-  console.log(chalk.cyan("===== END PRE-FLIGHT =====\n"));
-  return true;
 }
 
 async function sendToWordPress(
@@ -115,43 +94,40 @@ async function sendToWordPress(
     tag,
   };
 
-  console.log(chalk.blue("\n➡️ Posting to WP"));
+  console.log(chalk.blue("\n➡️ Posting to WP (GAINER)"));
   console.log("URL:", wpApiUrl);
   console.log("Payload:", JSON.stringify(payload, null, 2));
 
   try {
-    const response = await axios.post(wpApiUrl, payload, {
+    const res = await axios.post(wpApiUrl, payload, {
       auth: { username: wpUser, password: wpPass },
-      timeout: 30000,
+      timeout: 60000,
+      httpsAgent, // ✅ IPv4 forced
       headers: {
         "Content-Type": "application/json",
         "User-Agent": "Mozilla/5.0",
         Accept: "application/json",
       },
-      validateStatus: () => true, // we'll handle errors ourselves
+      validateStatus: () => true,
     });
 
-    console.log(chalk.magenta("📩 WP Response status:"), response.status);
+    console.log(chalk.magenta("📩 WP status:"), res.status);
 
-    if (response.status < 200 || response.status >= 300) {
-      console.log(chalk.red("❌ WordPress returned an error (non-2xx)"));
-      console.log("Response headers:", response.headers);
-      console.log("Response data:", response.data);
+    if (res.status < 200 || res.status >= 300) {
+      console.log(chalk.red("❌ WP returned error (non-2xx)"));
+      console.log("Response data:", res.data);
       return null;
     }
 
     console.log(chalk.green(`✅ Posted to WordPress for ${stockName}`));
-    console.log("Response data:", response.data);
-    return response.data;
-  } catch (error) {
-    console.log(chalk.red("❌ Axios/network crash while posting to WP"));
-    console.log("Error details:", {
-      message: error.message,
-      code: error.code,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      headers: error.response?.headers,
+    return res.data;
+  } catch (e) {
+    console.log(chalk.red("❌ Axios crash posting to WP"));
+    console.log("Error:", {
+      message: e.message,
+      code: e.code,
+      status: e.response?.status,
+      data: e.response?.data,
     });
     return null;
   }
@@ -160,10 +136,7 @@ async function sendToWordPress(
 /* ---------- Orchestrator ---------- */
 (async () => {
   const ok = await wpPreflightCheck();
-  if (!ok) {
-    console.log(chalk.red("Stopping because WP preflight failed."));
-    process.exit(1);
-  }
+  if (!ok) process.exit(1);
 
   const browser = await puppeteer.launch({
     headless: "new",
